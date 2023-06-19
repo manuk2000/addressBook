@@ -1,62 +1,149 @@
-#include <iostream>
-#include <fstream>
-#include <vector>
-#include <algorithm>
-#include <regex>
+#include "addressbook.h"
 
-struct Contact {
-    std::string name;
-    std::string email;
-    std::string phone;
-};
+AddressBook::AddressBook(const std::string& file) : fileName(file) {
+    loadContacts();
+}
 
-class AddressBook {
-private:
-    std::vector<Contact> contacts;
-    std::string fileName;
-
-public:
-    AddressBook(const std::string& file) : fileName(file) {
-        loadContacts();
+void AddressBook::addContact(const Contact& contact) {
+    if (!isValidEmailAddress(contact.email)) {
+        std::cout << "Invalid email address format. The contact will not be added.\n";
+        return;
     }
 
-   void AddressBook::addContact(const Contact& contact) {
-    contacts.push_back(contact);
-    std::cout << "The contact was successfully added.\n";
+    if (!isValidPhoneNumber(contact.phone)) {
+        std::cout << "Invalid phone number format. The contact will not be added.\n";
+        return;
+    }
+
+    std::ofstream file(fileName, std::ios::app);
+    if (file.is_open()) {
+        file << contact.name << ',' << contact.email << ',' << contact.phone << '\n';
+        file.close();
+        std::cout << "The contact was successfully added.\n";
+    } else {
+        std::cout << "Error: Could not open the file.\n";
+    }
 }
 
 void AddressBook::removeContact(const std::string& name) {
-    auto it = std::find_if(contacts.begin(), contacts.end(),
-                           [&](const Contact& c) { return c.name == name; });
-    if (it != contacts.end()) {
-        contacts.erase(it);
+    std::ifstream inFile(fileName);
+    if (!inFile.is_open()) {
+        std::cout << "Error: Could not open the file.\n";
+        return;
+    }
+
+    std::ofstream outFile("temp.txt");
+    if (!outFile.is_open()) {
+        std::cout << "Error: Could not create temporary file.\n";
+        inFile.close();
+        return;
+    }
+
+    std::string line;
+    bool contactFound = false;
+    while (std::getline(inFile, line)) {
+        auto commaPos1 = line.find(',');
+        if (commaPos1 != std::string::npos) {
+            std::string contactName = line.substr(0, commaPos1);
+            if (contactName != name) {
+                outFile << line << '\n';
+            } else {
+                contactFound = true;
+            }
+        }
+    }
+    inFile.close();
+    outFile.close();
+
+    if (contactFound) {
+        std::remove(fileName.c_str());
+        std::rename("temp.txt", fileName.c_str());
         std::cout << "The contact was successfully deleted.\n";
     } else {
         std::cout << "Contact not found.\n";
+        std::remove("temp.txt");
     }
 }
 
 void AddressBook::updateContact(const std::string& name, const Contact& newContact) {
-    auto it = std::find_if(contacts.begin(), contacts.end(),
-                           [&](const Contact& c) { return c.name == name; });
-    if (it != contacts.end()) {
-        it->email = newContact.email;
-        it->phone = newContact.phone;
+    if (!isValidEmailAddress(newContact.email)) {
+        std::cout << "Invalid email address format. The contact will not be updated.\n";
+        return;
+    }
+
+    if (!isValidPhoneNumber(newContact.phone)) {
+        std::cout << "Invalid phone number format. The contact will not be updated.\n";
+        return;
+    }
+
+    std::ifstream inFile(fileName);
+    if (!inFile.is_open()) {
+        std::cout << "Error: Could not open the file.\n";
+        return;
+    }
+
+    std::ofstream outFile("temp.txt");
+    if (!outFile.is_open()) {
+        std::cout << "Error: Could not create temporary file.\n";
+        inFile.close();
+        return;
+    }
+
+    std::string line;
+    bool contactFound = false;
+    while (std::getline(inFile, line)) {
+        auto commaPos1 = line.find(',');
+        if (commaPos1 != std::string::npos) {
+            std::string contactName = line.substr(0, commaPos1);
+            if (contactName != name) {
+                outFile << line << '\n';
+            } else {
+                outFile << newContact.name << ',' << newContact.email << ',' << newContact.phone << '\n';
+                contactFound = true;
+            }
+        }
+    }
+    inFile.close();
+    outFile.close();
+
+    if (contactFound) {
+        std::remove(fileName.c_str());
+        std::rename("temp.txt", fileName.c_str());
         std::cout << "The contact was successfully updated.\n";
     } else {
         std::cout << "Contact not found.\n";
+        std::remove("temp.txt");
     }
 }
 
 void AddressBook::searchContacts(const std::string& term) {
+    std::ifstream file(fileName);
+    if (!file.is_open()) {
+        std::cout << "Error: Could not open the file.\n";
+        return;
+    }
+
+    std::string line;
     std::vector<Contact> results;
-    for (const auto& contact : contacts) {
-        if (contact.name.find(term) != std::string::npos ||
-            contact.email.find(term) != std::string::npos ||
-            contact.phone.find(term) != std::string::npos) {
-            results.push_back(contact);
+    while (std::getline(file, line)) {
+        auto commaPos1 = line.find(',');
+        auto commaPos2 = line.find(',', commaPos1 + 1);
+        if (commaPos1 != std::string::npos && commaPos2 != std::string::npos) {
+            std::string contactName = line.substr(0, commaPos1);
+            std::string contactEmail = line.substr(commaPos1 + 1, commaPos2 - commaPos1 - 1);
+            std::string contactPhone = line.substr(commaPos2 + 1);
+            if (contactName.find(term) != std::string::npos ||
+                contactEmail.find(term) != std::string::npos ||
+                contactPhone.find(term) != std::string::npos) {
+                Contact contact;
+                contact.name = contactName;
+                contact.email = contactEmail;
+                contact.phone = contactPhone;
+                results.push_back(contact);
+            }
         }
     }
+    file.close();
 
     std::cout << "Results:\n";
     if (!results.empty()) {
@@ -69,150 +156,106 @@ void AddressBook::searchContacts(const std::string& term) {
 }
 
 void AddressBook::listContacts() {
+    std::ifstream file(fileName);
+    if (!file.is_open()) {
+        std::cout << "Error: Could not open the file.\n";
+        return;
+    }
+
+    std::string line;
     std::cout << "Contacts:\n";
-    if (!contacts.empty()) {
-        for (const auto& contact : contacts) {
-            std::cout << contact.name << " (" << contact.email << ", " << contact.phone << ")\n";
+    bool contactsFound = false;
+    while (std::getline(file, line)) {
+        auto commaPos1 = line.find(',');
+        auto commaPos2 = line.find(',', commaPos1 + 1);
+        if (commaPos1 != std::string::npos && commaPos2 != std::string::npos) {
+            std::string contactName = line.substr(0, commaPos1);
+            std::string contactEmail = line.substr(commaPos1 + 1, commaPos2 - commaPos1 - 1);
+            std::string contactPhone = line.substr(commaPos2 + 1);
+            std::cout << contactName << " (" << contactEmail << ", " << contactPhone << ")\n";
+            contactsFound = true;
         }
-    } else {
+    }
+    file.close();
+
+    if (!contactsFound) {
         std::cout << "No contacts found.\n";
     }
 }
 
 void AddressBook::saveContacts() {
-    std::ofstream file(fileName);
-    if (file.is_open()) {
-        for (const auto& contact : contacts) {
-            file << contact.name << ',' << contact.email << ',' << contact.phone << '\n';
-        }
-        std::cout << "The contacts were successfully saved.\n";
-    } else {
+    std::ifstream inFile(fileName);
+    if (!inFile.is_open()) {
         std::cout << "Error: Could not open the file.\n";
+        return;
     }
-    file.close();
+
+    std::ofstream outFile("temp.txt");
+    if (!outFile.is_open()) {
+        std::cout << "Error: Could not create temporary file.\n";
+        inFile.close();
+        return;
+    }
+
+    std::string line;
+    while (std::getline(inFile, line)) {
+        outFile << line << '\n';
+    }
+    inFile.close();
+    outFile.close();
+
+    std::remove(fileName.c_str());
+    std::rename("temp.txt", fileName.c_str());
+    std::cout << "Contacts saved.\n";
 }
 
 void AddressBook::loadContacts() {
     std::ifstream file(fileName);
-    if (file.is_open()) {
-        contacts.clear();
-        std::string line;
-        while (std::getline(file, line)) {
-            auto commaPos1 = line.find(',');
-            auto commaPos2 = line.find(',', commaPos1 + 1);
-            if (commaPos1 != std::string::npos && commaPos2 != std::string::npos) {
-                Contact contact;
-                contact.name = line.substr(0, commaPos1);
-                contact.email = line.substr(commaPos1 + 1, commaPos2 - commaPos1 - 1);
-                contact.phone = line.substr(commaPos2 + 1);
-                contacts.push_back(contact);
-            }
-        }
-        std::cout << "The contacts were successfully loaded.\n";
-    } else {
+    if (!file.is_open()) {
         std::cout << "Error: Could not open the file.\n";
+        return;
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+        auto commaPos1 = line.find(',');
+        auto commaPos2 = line.find(',', commaPos1 + 1);
+        if (commaPos1 != std::string::npos && commaPos2 != std::string::npos) {
+            std::string contactName = line.substr(0, commaPos1);
+            std::string contactEmail = line.substr(commaPos1 + 1, commaPos2 - commaPos1 - 1);
+            std::string contactPhone = line.substr(commaPos2 + 1);
+            Contact contact;
+            contact.name = contactName;
+            contact.email = contactEmail;
+            contact.phone = contactPhone;
+        }
     }
     file.close();
 }
 
 bool AddressBook::isValidPhoneNumber(const std::string& phone) {
-    std::regex regex("^\\d{3}-\\d{3}-\\d{4}$");
+    // Simple check for a valid phone number format (10 digits)
+    std::regex regex("\\d{10}");
     return std::regex_match(phone, regex);
 }
 
 bool AddressBook::isValidEmailAddress(const std::string& email) {
-    std::regex regex(R"([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})");
+    // Simple check for a valid email address format
+    std::regex regex("[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,4}");
     return std::regex_match(email, regex);
 }
-};
-int main() {
-    std::string fileName = "contacts.txt";
-    AddressBook addressBook(fileName);
 
-    while (true) {
-    std::cout << "Welcome to the Address Book:\n\n"
-              << "Commands:\n"
-              << "add - add a new contact\n"
-              << "delete - delete a contact\n"
-              << "update - update a contact\n"
-              << "search - search for a contact\n"
-              << "list - list all contacts\n"
-              << "save - save contacts to a file\n"
-              << "load - load contacts from a file\n"
-              << "exit - exit the program\n\n";
-        std::cout << "Please enter a command: ";
-        std::string command;
-        std::getline(std::cin, command);
+Contact AddressBook::createContact() {
+    Contact contact;
+    std::cout << "Enter name: ";
+    std::cin.ignore();
+    std::getline(std::cin, contact.name);
 
-        if (command == "add") {
-            Contact contact;
-            std::cout << "Please enter the name of the contact: ";
-            std::getline(std::cin, contact.name);
+    std::cout << "Enter email: ";
+    std::getline(std::cin, contact.email);
 
-            do {
-                std::cout << "Please enter the email address of the contact: ";
-                std::getline(std::cin, contact.email);
-                if (!addressBook.isValidEmailAddress(contact.email)) {
-                    std::cout << "Invalid email address format. Please try again.\n";
-                }
-            } while (!addressBook.isValidEmailAddress(contact.email));
+    std::cout << "Enter phone: ";
+    std::getline(std::cin, contact.phone);
 
-            do {
-                std::cout << "Please enter the phone number of the contact: ";
-                std::getline(std::cin, contact.phone);
-                if (!addressBook.isValidPhoneNumber(contact.phone)) {
-                    std::cout << "Invalid phone number format. Please try again.\n";
-                }
-            } while (!addressBook.isValidPhoneNumber(contact.phone));
-
-            addressBook.addContact(contact);
-        } else if (command == "delete") {
-            std::cout << "Please enter the name of the contact: ";
-            std::string name;
-            std::getline(std::cin, name);
-            addressBook.removeContact(name);
-        } else if (command == "update") {
-            std::cout << "Please enter the name of the contact: ";
-            std::string name;
-            std::getline(std::cin, name);
-            Contact newContact;
-            std::cout << "Please enter the new email address: ";
-            std::getline(std::cin, newContact.email);
-
-            if (!addressBook.isValidEmailAddress(newContact.email)) {
-                std::cout << "Invalid email address format. The contact will not be updated.\n";
-                continue;
-            }
-
-            std::cout << "Please enter the new phone number: ";
-            std::getline(std::cin, newContact.phone);
-
-            if (!addressBook.isValidPhoneNumber(newContact.phone)) {
-                std::cout << "Invalid phone number format. The contact will not be updated.\n";
-                continue;
-            }
-
-            addressBook.updateContact(name, newContact);
-        } else if (command == "search") {
-            std::cout << "Please enter the search term: ";
-            std::string term;
-            std::getline(std::cin, term);
-            addressBook.searchContacts(term);
-        } else if (command == "list") {
-            addressBook.listContacts();
-        } else if (command == "save") {
-            addressBook.saveContacts();
-        } else if (command == "load") {
-            addressBook.loadContacts();
-        } else if (command == "exit") {
-            std::cout << "Goodbye!\n";
-            break;
-        } else {
-            std::cout << "Invalid command. Please try again.\n";
-        }
-
-        std::cout << std::endl;
-    }
-
-    return 0;
+    return contact;
 }

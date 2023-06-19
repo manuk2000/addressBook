@@ -1,8 +1,10 @@
 #ifndef ADDRESSBOOK_H
 #define ADDRESSBOOK_H
 
+#include <iostream>
+#include <fstream>
 #include <string>
-#include <vector>
+#include <regex>
 
 struct Contact {
     std::string name;
@@ -12,7 +14,6 @@ struct Contact {
 
 class AddressBook {
 private:
-    std::vector<Contact> contacts;
     std::string fileName;
 
 public:
@@ -26,9 +27,9 @@ public:
     void saveContacts();
     void loadContacts();
 
-private:
     bool isValidPhoneNumber(const std::string& phone);
     bool isValidEmailAddress(const std::string& email);
+    Contact createContact();
 };
 
-#endif // ADDRESSBOOK_H
+#endif
